@@ -10,6 +10,9 @@ set(GLFW_BUILD_TESTS FALSE)
 set(GLFW_BUILD_DOCS FALSE)
 set(GLFW_INSTALL FALSE)
 
+set(GLM_BUILD_LIBRARY FALSE)
+set(GLM_ENABLE_CXX_20 TRUE)
+
 include(FetchContent)
 FetchContent_Declare(
   glfw3
@@ -24,7 +27,13 @@ FetchContent_Declare(
   SOURCE_SUBDIR cmake
   FIND_PACKAGE_ARGS
 )
-FetchContent_MakeAvailable(glfw3 Glad)
+FetchContent_Declare(
+  glm
+  GIT_REPOSITORY https://github.com/g-truc/glm.git
+  GIT_TAG        2d4c4b4dd31fde06cfffad7915c2b3006402322f
+  FIND_PACKAGE_ARGS
+)
+FetchContent_MakeAvailable(glfw3 Glad glm)
 
 find_package(Python REQUIRED COMPONENTS Interpreter)
 
@@ -38,4 +47,5 @@ glad_add_library(glad_gl_core_mx_4_6 STATIC REPRODUCIBLE API gl:core=4.6)
 target_link_libraries(GraphicsTransforms
   glfw
   glad_gl_core_mx_4_6
+  glm::glm
 )
