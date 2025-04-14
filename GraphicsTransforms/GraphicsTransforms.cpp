@@ -1,5 +1,11 @@
-﻿#include <cstdlib>
+﻿#include <cassert>
+#include <cstddef>
+#include <cstdlib>
+#include <cmath>
+#include <algorithm>
+#include <chrono>
 #include <iostream>
+#include <utility>
 
 #include <glad/gl.h>
 #include <GLFW/glfw3.h>
@@ -7,10 +13,75 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
 
+static constexpr glm::vec3 up{ 0.0f, 1.0f, 0.0f };
+static constexpr std::size_t cameras_count{ 2 };
+
+enum struct ProjectionType
+{
+    perspective,
+    orthographic,
+};
+
 struct WindowData
 {
     int width;
     int height;
+
+    std::size_t camera_active_index;
+
+    bool mouse_first;
+    glm::vec2 mouse_pos_last;
+    float yaw[cameras_count];
+    float pitch[cameras_count];
+    glm::vec3 camera_pos[cameras_count];
+
+    ProjectionType projection_type[cameras_count];
+
+    float fov[cameras_count];
+    float near[cameras_count];
+    float far[cameras_count];
+
+    glm::vec3 calculate_camera_front() const
+    {
+        const auto y = yaw[camera_active_index];
+        const auto p = pitch[camera_active_index];
+        const auto sy = std::sin(y);
+        const auto cy = std::cos(y);
+        const auto sp = std::sin(p);
+        const auto cp = std::cos(p);
+        const glm::vec3 front = {
+            cy * cp,
+            sp,
+            sy * cp,
+        };
+        return glm::normalize(front);
+    }
+
+    glm::mat4 calculate_view() const
+    {
+        const auto front = calculate_camera_front();
+        const auto pos = camera_pos[camera_active_index];
+        return glm::lookAt(pos, pos + front, up);
+    }
+
+    glm::mat4 calculate_projection() const
+    {
+        switch (projection_type[camera_active_index])
+        {
+        case ProjectionType::orthographic:
+            return glm::ortho(
+                -10.0f, 10.0f,
+                -10.0f, 10.0f,
+                near[camera_active_index], far[camera_active_index]);
+        case ProjectionType::perspective:
+            return glm::perspective(
+                fov[camera_active_index],
+                static_cast<float>(width) / height,
+                near[camera_active_index],
+                far[camera_active_index]
+            );
+        }
+    }
 };
 
 static void framebuffer_size_callback(GLFWwindow* const window, const int width, const int height)
@@ -21,12 +92,45 @@ static void framebuffer_size_callback(GLFWwindow* const window, const int width,
     glViewport(0, 0, width, height);
 }
 
-static void mouse_callback(GLFWwindow* window, double xposIn, double yposIn)
+static void mouse_callback(GLFWwindow* const window, double xpos_in, double ypos_in)
 {
+    const auto data = static_cast<WindowData*>(glfwGetWindowUserPointer(window));
+
+    const glm::vec2 pos{ static_cast<float>(xpos_in), static_cast<float>(ypos_in) };
+
+    if (data->mouse_first)
+    {
+        data->mouse_pos_last = pos;
+        data->mouse_first = false;
+    }
+
+    const auto offset = pos - data->mouse_pos_last;
+    data->mouse_pos_last = pos;
+
+    constexpr auto sensitivity = 0.1f;
+    const auto yaw_delta = glm::radians(offset.x * sensitivity);
+    const auto pitch_delta = glm::radians(offset.y * -sensitivity);
+    data->yaw[data->camera_active_index] += yaw_delta;
+    data->pitch[data->camera_active_index] += pitch_delta;
+
+    // Make sure that when pitch is out of bounds, screen doesn't get flipped.
+    constexpr auto pitch_min = glm::radians(-89.0f);
+    constexpr auto pitch_max = glm::radians(89.0f);
+    data->pitch[data->camera_active_index] = std::clamp(data->pitch[data->camera_active_index], pitch_min, pitch_max);
 }
 
-static void scroll_callback(GLFWwindow* window, double xoffset, double yoffset)
+static void scroll_callback(GLFWwindow* const window, const double xoffset, const double yoffset)
 {
+    const auto data = static_cast<WindowData*>(glfwGetWindowUserPointer(window));
+    if (data->projection_type[data->camera_active_index] == ProjectionType::perspective)
+    {
+        const auto fov_delta = static_cast<float>(glm::radians(yoffset));
+        const auto fov_new = data->fov[data->camera_active_index] - fov_delta;
+
+        constexpr auto fov_min = glm::radians(1.0f);
+        constexpr auto fov_max = glm::radians(90.0f);
+        data->fov[data->camera_active_index] = std::clamp(fov_new, fov_min, fov_max);
+    }
 }
 
 static unsigned compile_shader(const char* const source, const GLenum type, const char* const type_string)
@@ -49,6 +153,26 @@ static unsigned compile_shader(const char* const source, const GLenum type, cons
     return shader;
 }
 
+template<typename T>
+auto create_debounce_key_press_handler(T&& f)
+{
+    return [released = true, f = std::forward<T>(f)](GLFWwindow* const window, const int key) mutable
+        {
+            if (glfwGetKey(window, key) == GLFW_PRESS)
+            {
+                if (released)
+                {
+                    f();
+                    released = false;
+                }
+            }
+            else
+            {
+                released = true;
+            }
+        };
+};
+
 int main()
 {
     glfwInit();
@@ -59,6 +183,15 @@ int main()
     WindowData window_data = {
         .width = 800,
         .height = 600,
+        .camera_active_index = 0,
+        .mouse_first = true,
+        .yaw = { glm::radians(-90.0f), 0.0f },
+        .pitch = { 0.0f, glm::radians(-30.0f) },
+        .camera_pos = { glm::vec3{ 0.0f, 0.0f, 1.0f }, glm::vec3{ -5.0f, 3.0f, 1.0f } },
+        .projection_type = { ProjectionType::perspective, ProjectionType::perspective },
+        .fov = { glm::radians(45.0f), glm::radians(45.0f) },
+        .near = { 0.1f, 0.1f },
+        .far = { 100.0f, 100.0f },
     };
 
     GLFWwindow* const window = glfwCreateWindow(window_data.width, window_data.height, "LearnOpenGL", NULL, NULL);
@@ -149,19 +282,77 @@ void main()
 
     glEnable(GL_DEPTH_TEST);
 
+    auto handle_camera_switch = create_debounce_key_press_handler([&window_data]()
+        {
+            window_data.camera_active_index = (window_data.camera_active_index + 1) % cameras_count;
+        });
+    auto handle_camera_0_projection_switch = create_debounce_key_press_handler([&window_data]()
+        {
+            switch (window_data.projection_type[0])
+            {
+            case ProjectionType::orthographic:
+                window_data.projection_type[0] = ProjectionType::perspective;
+                break;
+            case ProjectionType::perspective:
+                window_data.projection_type[0] = ProjectionType::orthographic;
+                break;
+            }
+        });
+    auto handle_camera_1_projection_switch = create_debounce_key_press_handler([&window_data]()
+        {
+            switch (window_data.projection_type[1])
+            {
+            case ProjectionType::orthographic:
+                window_data.projection_type[1] = ProjectionType::perspective;
+                break;
+            case ProjectionType::perspective:
+                window_data.projection_type[1] = ProjectionType::orthographic;
+                break;
+            }
+        });
+
+    auto time_last = std::chrono::steady_clock::now();
     while (!glfwWindowShouldClose(window))
     {
+        const auto time_current = std::chrono::steady_clock::now();
+        const auto time_delta = time_current - time_last;
+        time_last = time_current;
+
         if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
         {
             glfwSetWindowShouldClose(window, true);
+        }
+
+        handle_camera_switch(window, GLFW_KEY_Q);
+        handle_camera_0_projection_switch(window, GLFW_KEY_Z);
+        handle_camera_1_projection_switch(window, GLFW_KEY_X);
+
+        const auto camera_front = window_data.calculate_camera_front();
+        const auto camera_right = glm::cross(camera_front, up);
+        const auto camera_speed = 2.5f * std::chrono::duration_cast<std::chrono::duration<float>>(time_delta).count();
+        if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS)
+        {
+            window_data.camera_pos[window_data.camera_active_index] += camera_speed * camera_front;
+        }
+        if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS)
+        {
+            window_data.camera_pos[window_data.camera_active_index] -= camera_speed * camera_front;
+        }
+        if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS)
+        {
+            window_data.camera_pos[window_data.camera_active_index] -= camera_speed * camera_right;
+        }
+        if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS)
+        {
+            window_data.camera_pos[window_data.camera_active_index] += camera_speed * camera_right;
         }
 
         glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
         const auto model = glm::mat4{ 1.0f };
-        const auto view = glm::mat4{ 1.0f };
-        const auto projection = glm::mat4{ 1.0f };
+        const auto view = window_data.calculate_view();
+        const auto projection = window_data.calculate_projection();
         const auto mvp = projection * view * model;
         const auto color = glm::vec3{ 1.0f, 1.0f, 1.0f };
 
