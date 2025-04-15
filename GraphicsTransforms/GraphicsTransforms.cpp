@@ -70,8 +70,8 @@ struct WindowData
         {
         case ProjectionType::orthographic:
             return glm::ortho(
-                -10.0f, 10.0f,
-                -10.0f, 10.0f,
+                -3.0f, 3.0f,
+                -3.0f, 3.0f,
                 near[camera_active_index], far[camera_active_index]);
         case ProjectionType::perspective:
             return glm::perspective(
@@ -172,6 +172,14 @@ auto create_debounce_key_press_handler(T&& f)
             }
         };
 };
+
+static auto create_debounce_key_press_handler_bool_switcher(bool& value)
+{
+    return create_debounce_key_press_handler([&value]()
+        {
+            value = !value;
+        });
+}
 
 int main()
 {
@@ -311,6 +319,24 @@ void main()
             }
         });
 
+    constexpr std::size_t quads_count = 2;
+    bool quad_enable[quads_count] = { true, false };
+    bool quad_scale[quads_count] = { false, false };
+    bool quad_rotate[quads_count] = { false, false };
+    bool quad_translate[quads_count] = { false, false };
+
+    auto handle_quad_0_enable_switch = create_debounce_key_press_handler_bool_switcher(quad_enable[0]);
+    auto handle_quad_1_enable_switch = create_debounce_key_press_handler_bool_switcher(quad_enable[1]);
+
+    auto handle_quad_0_scale_switch = create_debounce_key_press_handler_bool_switcher(quad_scale[0]);
+    auto handle_quad_1_scale_switch = create_debounce_key_press_handler_bool_switcher(quad_scale[1]);
+
+    auto handle_quad_0_rotate_switch = create_debounce_key_press_handler_bool_switcher(quad_rotate[0]);
+    auto handle_quad_1_rotate_switch = create_debounce_key_press_handler_bool_switcher(quad_rotate[1]);
+
+    auto handle_quad_0_translate_switch = create_debounce_key_press_handler_bool_switcher(quad_translate[0]);
+    auto handle_quad_1_translate_switch = create_debounce_key_press_handler_bool_switcher(quad_translate[1]);
+
     auto time_last = std::chrono::steady_clock::now();
     while (!glfwWindowShouldClose(window))
     {
@@ -326,6 +352,18 @@ void main()
         handle_camera_switch(window, GLFW_KEY_Q);
         handle_camera_0_projection_switch(window, GLFW_KEY_Z);
         handle_camera_1_projection_switch(window, GLFW_KEY_X);
+
+        handle_quad_0_enable_switch(window, GLFW_KEY_R);
+        handle_quad_1_enable_switch(window, GLFW_KEY_F);
+
+        handle_quad_0_scale_switch(window, GLFW_KEY_T);
+        handle_quad_1_scale_switch(window, GLFW_KEY_G);
+
+        handle_quad_0_rotate_switch(window, GLFW_KEY_Y);
+        handle_quad_1_rotate_switch(window, GLFW_KEY_H);
+
+        handle_quad_0_translate_switch(window, GLFW_KEY_U);
+        handle_quad_1_translate_switch(window, GLFW_KEY_J);
 
         const auto camera_front = window_data.calculate_camera_front();
         const auto camera_right = glm::cross(camera_front, up);
@@ -350,19 +388,46 @@ void main()
         glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-        const auto model = glm::mat4{ 1.0f };
         const auto view = window_data.calculate_view();
         const auto projection = window_data.calculate_projection();
-        const auto mvp = projection * view * model;
-        const auto color = glm::vec3{ 1.0f, 1.0f, 1.0f };
+        const auto view_projection = projection * view;
 
         glUseProgram(shader_program);
-        glUniformMatrix4fv(glGetUniformLocation(shader_program, "model_view_projection"), 1, GL_FALSE, glm::value_ptr(mvp));
-        glUniform3f(glGetUniformLocation(shader_program, "color"), color.x, color.y, color.z);
+
+        constexpr glm::vec3 quad_color{ 1.0f, 1.0f, 1.0f };
+        glUniform3f(glGetUniformLocation(shader_program, "color"), quad_color.x, quad_color.y, quad_color.z);
 
         glBindVertexArray(vao_quad);
 
-        glDrawArrays(GL_TRIANGLES, 0, 6);
+        constexpr glm::vec3 quad_translation[quads_count] = {
+            { -1.0f, 0.0f, 0.0f },
+            { 1.0f, 0.0f, 0.0f },
+        };
+        for (std::size_t i = 0; i != quads_count; ++i)
+        {
+            if (!quad_enable[i])
+            {
+                continue;
+            }
+            auto model = glm::mat4{ 1.0f };
+            if (quad_translate[i])
+            {
+                model = glm::translate(model, quad_translation[i]);
+            }
+            if (quad_rotate[i])
+            {
+                model = glm::rotate(model, glm::radians(-85.0f), glm::vec3{ 1.0f, 0.0f, 0.0f });
+            }
+            if (quad_scale[i])
+            {
+                model = glm::scale(model, glm::vec3{ 0.2f, 1000.0f, 1.0f });
+            }
+            const auto mvp = view_projection * model;
+
+            glUniformMatrix4fv(glGetUniformLocation(shader_program, "model_view_projection"), 1, GL_FALSE, glm::value_ptr(mvp));
+
+            glDrawArrays(GL_TRIANGLES, 0, 6);
+        }
 
         glfwSwapBuffers(window);
         glfwPollEvents();
