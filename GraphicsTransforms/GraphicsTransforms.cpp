@@ -28,6 +28,7 @@ struct WindowData
     int height;
 
     std::size_t camera_active_index;
+    std::size_t camera_fov_control_index;
 
     bool mouse_first;
     glm::vec2 mouse_pos_last;
@@ -37,6 +38,7 @@ struct WindowData
 
     ProjectionType projection_type[cameras_count];
 
+    float ortho_height_half[cameras_count];
     float fov[cameras_count];
     float near[cameras_count];
     float far[cameras_count];
@@ -66,17 +68,22 @@ struct WindowData
 
     glm::mat4 calculate_projection() const
     {
+        const auto aspect_ratio = static_cast<float>(width) / height;
         switch (projection_type[camera_active_index])
         {
         case ProjectionType::orthographic:
+        {
+            const auto h = ortho_height_half[camera_active_index];
+            const auto w = h * aspect_ratio;
             return glm::ortho(
-                -3.0f, 3.0f,
-                -3.0f, 3.0f,
+                -w, w,
+                -h, h,
                 near[camera_active_index], far[camera_active_index]);
+        }
         case ProjectionType::perspective:
             return glm::perspective(
                 fov[camera_active_index],
-                static_cast<float>(width) / height,
+                aspect_ratio,
                 near[camera_active_index],
                 far[camera_active_index]
             );
@@ -122,14 +129,26 @@ static void mouse_callback(GLFWwindow* const window, double xpos_in, double ypos
 static void scroll_callback(GLFWwindow* const window, const double xoffset, const double yoffset)
 {
     const auto data = static_cast<WindowData*>(glfwGetWindowUserPointer(window));
-    if (data->projection_type[data->camera_active_index] == ProjectionType::perspective)
+    switch (data->projection_type[data->camera_fov_control_index])
     {
-        const auto fov_delta = static_cast<float>(glm::radians(yoffset));
-        const auto fov_new = data->fov[data->camera_active_index] - fov_delta;
+    case ProjectionType::perspective:
+    {
+        const auto fov_delta = -static_cast<float>(glm::radians(yoffset));
+        const auto fov_new = data->fov[data->camera_fov_control_index] + fov_delta;
 
         constexpr auto fov_min = glm::radians(1.0f);
         constexpr auto fov_max = glm::radians(90.0f);
-        data->fov[data->camera_active_index] = std::clamp(fov_new, fov_min, fov_max);
+        data->fov[data->camera_fov_control_index] = std::clamp(fov_new, fov_min, fov_max);
+        break;
+    }
+    case ProjectionType::orthographic:
+    {
+        const auto height_delta = -static_cast<float>(yoffset / 10.0);
+        const auto height_half_new = data->ortho_height_half[data->camera_fov_control_index] + height_delta;
+
+        data->ortho_height_half[data->camera_fov_control_index] = std::max(0.1f, height_half_new);
+        break;
+    }
     }
 }
 
@@ -192,11 +211,13 @@ int main()
         .width = 800,
         .height = 600,
         .camera_active_index = 0,
+        .camera_fov_control_index = 0,
         .mouse_first = true,
         .yaw = { glm::radians(-90.0f), 0.0f },
         .pitch = { 0.0f, glm::radians(-30.0f) },
         .camera_pos = { glm::vec3{ 0.0f, 0.0f, 1.0f }, glm::vec3{ -5.0f, 3.0f, 1.0f } },
         .projection_type = { ProjectionType::perspective, ProjectionType::perspective },
+        .ortho_height_half = { 3.0f, 3.0f },
         .fov = { glm::radians(45.0f), glm::radians(45.0f) },
         .near = { 0.1f, 0.1f },
         .far = { 100.0f, 100.0f },
@@ -294,6 +315,10 @@ void main()
         {
             window_data.camera_active_index = (window_data.camera_active_index + 1) % cameras_count;
         });
+    auto handle_camera_fov_control_switch = create_debounce_key_press_handler([&window_data]()
+        {
+            window_data.camera_fov_control_index = (window_data.camera_fov_control_index + 1) % cameras_count;
+        });
     auto handle_camera_0_projection_switch = create_debounce_key_press_handler([&window_data]()
         {
             switch (window_data.projection_type[0])
@@ -350,6 +375,7 @@ void main()
         }
 
         handle_camera_switch(window, GLFW_KEY_Q);
+        handle_camera_fov_control_switch(window, GLFW_KEY_E);
         handle_camera_0_projection_switch(window, GLFW_KEY_Z);
         handle_camera_1_projection_switch(window, GLFW_KEY_X);
 
