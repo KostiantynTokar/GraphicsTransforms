@@ -314,10 +314,12 @@ void main()
     auto handle_camera_switch = create_debounce_key_press_handler([&window_data]()
         {
             window_data.camera_active_index = (window_data.camera_active_index + 1) % cameras_count;
+            std::cout << "Camera control: " << window_data.camera_active_index << std::endl;
         });
     auto handle_camera_fov_control_switch = create_debounce_key_press_handler([&window_data]()
         {
             window_data.camera_fov_control_index = (window_data.camera_fov_control_index + 1) % cameras_count;
+            std::cout << "FoV control: camera " << window_data.camera_fov_control_index << std::endl;
         });
     auto handle_camera_0_projection_switch = create_debounce_key_press_handler([&window_data]()
         {
