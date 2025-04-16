@@ -369,6 +369,13 @@ void main()
 
     auto handle_quads_pair_animation_enable_switch = create_debounce_key_press_handler_bool_switcher(quads_pair_animation_enable);
 
+    auto quads_triplet_enable = false;
+    auto quads_triplet_animation_enable = false;
+    auto quads_triplet_animation_angle = 0.0f;
+
+    auto handle_quads_triplet_enable_switch = create_debounce_key_press_handler_bool_switcher(quads_triplet_enable);
+    auto handle_quads_triplet_animation_enable_switch = create_debounce_key_press_handler_bool_switcher(quads_triplet_animation_enable);
+
     auto time_last = std::chrono::steady_clock::now();
     while (!glfwWindowShouldClose(window))
     {
@@ -400,6 +407,9 @@ void main()
         handle_quad_1_translate_switch(window, GLFW_KEY_J);
 
         handle_quads_pair_animation_enable_switch(window, GLFW_KEY_I);
+
+        handle_quads_triplet_enable_switch(window, GLFW_KEY_K);
+        handle_quads_triplet_animation_enable_switch(window, GLFW_KEY_L);
 
         const auto camera_front = window_data.calculate_camera_front();
         const auto camera_right = glm::cross(camera_front, up);
@@ -492,6 +502,42 @@ void main()
             const auto angle_delta = glm::radians(time_delta_s);
             quads_pair_animation_angles[0] += 20.0f * angle_delta;
             quads_pair_animation_angles[1] += 40.0f * angle_delta;
+        }
+
+        if (quads_triplet_enable)
+        {
+            constexpr glm::vec3 colors[3] = {
+                { 1.0f, 1.0f, 1.0f }, // white up
+                { 1.0f, 0.0f, 0.0f }, // red right
+                { 0.0f, 1.0f, 0.0f }, // green front
+            };
+            constexpr float rotation_angles[3] = {
+                glm::radians(-90.0f),
+                glm::radians(90.0f),
+                0.0f,
+            };
+            constexpr glm::vec3 rotation_axes[3] = {
+                { 1.0f, 0.0f, 0.0f },
+                { 0.0f, 1.0f, 0.0f },
+                { 0.0f, 0.0f, 1.0f },
+            };
+            auto model_base = glm::rotate(glm::mat4{ 1.0f }, quads_triplet_animation_angle, { 0.0f, 1.0f, 0.0f });
+            model_base = glm::translate(model_base, { 1.0f, 1.0f, 1.0f });
+            for (std::size_t i = 0; i != 3; ++i)
+            {
+                auto model_local = glm::rotate(glm::mat4{ 1.0f }, rotation_angles[i], rotation_axes[i]);
+                model_local = glm::translate(model_local, { 0.0f, 0.0f, 0.5f });
+                const auto model = model_base * model_local;
+                const auto mvp = view_projection * model;
+                glUniform3f(glGetUniformLocation(shader_program, "color"), colors[i].x, colors[i].y, colors[i].z);
+                glUniformMatrix4fv(glGetUniformLocation(shader_program, "model_view_projection"), 1, GL_FALSE, glm::value_ptr(mvp));
+                glDrawArrays(GL_TRIANGLES, 0, 6);
+            }
+            if (quads_triplet_animation_enable)
+            {
+                const auto angle_delta = glm::radians(time_delta_s);
+                quads_triplet_animation_angle += 40.0f * angle_delta;
+            }
         }
 
         glfwSwapBuffers(window);
