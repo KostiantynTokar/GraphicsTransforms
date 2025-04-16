@@ -364,11 +364,17 @@ void main()
     auto handle_quad_0_translate_switch = create_debounce_key_press_handler_bool_switcher(quad_translate[0]);
     auto handle_quad_1_translate_switch = create_debounce_key_press_handler_bool_switcher(quad_translate[1]);
 
+    auto quads_pair_animation_enable = false;
+    float quads_pair_animation_angles[2] = { 0.0f, 0.0f };
+
+    auto handle_quads_pair_animation_enable_switch = create_debounce_key_press_handler_bool_switcher(quads_pair_animation_enable);
+
     auto time_last = std::chrono::steady_clock::now();
     while (!glfwWindowShouldClose(window))
     {
         const auto time_current = std::chrono::steady_clock::now();
         const auto time_delta = time_current - time_last;
+        const auto time_delta_s = std::chrono::duration_cast<std::chrono::duration<float>>(time_delta).count();
         time_last = time_current;
 
         if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
@@ -393,9 +399,11 @@ void main()
         handle_quad_0_translate_switch(window, GLFW_KEY_U);
         handle_quad_1_translate_switch(window, GLFW_KEY_J);
 
+        handle_quads_pair_animation_enable_switch(window, GLFW_KEY_I);
+
         const auto camera_front = window_data.calculate_camera_front();
         const auto camera_right = glm::cross(camera_front, up);
-        const auto camera_speed = 2.5f * std::chrono::duration_cast<std::chrono::duration<float>>(time_delta).count();
+        const auto camera_speed = 2.5f * time_delta_s;
         if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS)
         {
             window_data.camera_pos[window_data.camera_active_index] += camera_speed * camera_front;
@@ -455,6 +463,35 @@ void main()
             glUniformMatrix4fv(glGetUniformLocation(shader_program, "model_view_projection"), 1, GL_FALSE, glm::value_ptr(mvp));
 
             glDrawArrays(GL_TRIANGLES, 0, 6);
+        }
+
+        if (quads_pair_animation_enable)
+        {
+            constexpr glm::vec3 colors[2] = {
+                { 1.0f, 0.0f, 0.0f },
+                { 0.0f, 0.0f, 1.0f },
+            };
+            constexpr glm::vec3 translations[2] = {
+                { 0.0f, 0.0f, 0.0f },
+                { 1.0f, 0.0f, 0.0f },
+            };
+            constexpr glm::vec3 rotation_axes[2] = {
+                { 0.0f, 0.0f, 1.0f },
+                { 1.0f, 0.0f, 0.0f },
+            };
+            auto model = glm::mat4{ 1.0f };
+            for (std::size_t i = 0; i != 2; ++i)
+            {
+                model = glm::translate(model, translations[i]);
+                model = glm::rotate(model, quads_pair_animation_angles[i], rotation_axes[i]);
+                const auto mvp = view_projection * model;
+                glUniform3f(glGetUniformLocation(shader_program, "color"), colors[i].x, colors[i].y, colors[i].z);
+                glUniformMatrix4fv(glGetUniformLocation(shader_program, "model_view_projection"), 1, GL_FALSE, glm::value_ptr(mvp));
+                glDrawArrays(GL_TRIANGLES, 0, 6);
+            }
+            const auto angle_delta = glm::radians(time_delta_s);
+            quads_pair_animation_angles[0] += 20.0f * angle_delta;
+            quads_pair_animation_angles[1] += 40.0f * angle_delta;
         }
 
         glfwSwapBuffers(window);
