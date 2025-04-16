@@ -43,10 +43,10 @@ struct WindowData
     float near[cameras_count];
     float far[cameras_count];
 
-    glm::vec3 calculate_camera_front() const
+    glm::vec3 calculate_camera_front(const std::size_t i) const
     {
-        const auto y = yaw[camera_active_index];
-        const auto p = pitch[camera_active_index];
+        const auto y = yaw[i];
+        const auto p = pitch[i];
         const auto sy = std::sin(y);
         const auto cy = std::cos(y);
         const auto sp = std::sin(p);
@@ -59,33 +59,33 @@ struct WindowData
         return glm::normalize(front);
     }
 
-    glm::mat4 calculate_view() const
+    glm::mat4 calculate_view(const std::size_t i) const
     {
-        const auto front = calculate_camera_front();
-        const auto pos = camera_pos[camera_active_index];
+        const auto front = calculate_camera_front(i);
+        const auto pos = camera_pos[i];
         return glm::lookAt(pos, pos + front, up);
     }
 
-    glm::mat4 calculate_projection() const
+    glm::mat4 calculate_projection(const std::size_t i) const
     {
         const auto aspect_ratio = static_cast<float>(width) / height;
-        switch (projection_type[camera_active_index])
+        switch (projection_type[i])
         {
         case ProjectionType::orthographic:
         {
-            const auto h = ortho_height_half[camera_active_index];
+            const auto h = ortho_height_half[i];
             const auto w = h * aspect_ratio;
             return glm::ortho(
                 -w, w,
                 -h, h,
-                near[camera_active_index], far[camera_active_index]);
+                near[i], far[i]);
         }
         case ProjectionType::perspective:
             return glm::perspective(
-                fov[camera_active_index],
+                fov[i],
                 aspect_ratio,
-                near[camera_active_index],
-                far[camera_active_index]
+                near[i],
+                far[i]
             );
         }
     }
@@ -217,10 +217,10 @@ int main()
         .pitch = { 0.0f, glm::radians(-30.0f) },
         .camera_pos = { glm::vec3{ 0.0f, 0.0f, 1.0f }, glm::vec3{ -5.0f, 3.0f, 1.0f } },
         .projection_type = { ProjectionType::perspective, ProjectionType::perspective },
-        .ortho_height_half = { 3.0f, 3.0f },
+        .ortho_height_half = { 2.0f, 2.0f },
         .fov = { glm::radians(45.0f), glm::radians(45.0f) },
         .near = { 0.1f, 0.1f },
-        .far = { 100.0f, 100.0f },
+        .far = { 10.0f, 50.0f },
     };
 
     GLFWwindow* const window = glfwCreateWindow(window_data.width, window_data.height, "LearnOpenGL", NULL, NULL);
@@ -309,6 +309,42 @@ void main()
     glDeleteShader(shader_fragment);
     glDeleteShader(shader_vertex);
 
+    const float vertices_frustum[] = {
+        // loop at z=-1.0f
+        -1.0f, -1.0f, -1.0f,
+        1.0f, -1.0f, -1.0f,
+        1.0f, 1.0f, -1.0f,
+        -1.0f, 1.0f, -1.0f,
+        // loop at z=1.0f
+        -1.0f, -1.0f, 1.0f,
+        1.0f, -1.0f, 1.0f,
+        1.0f, 1.0f, 1.0f,
+        -1.0f, 1.0f, 1.0f,
+        // line
+        -1.0f, -1.0f, -1.0f,
+        -1.0f, -1.0f, 1.0f,
+        // line
+        1.0f, -1.0f, -1.0f,
+        1.0f, -1.0f, 1.0f,
+        // line
+        1.0f, 1.0f, -1.0f,
+        1.0f, 1.0f, 1.0f,
+        // line
+        -1.0f, 1.0f, -1.0f,
+        -1.0f, 1.0f, 1.0f,
+    };
+    unsigned vbo_frustum, vao_frustum;
+    glGenVertexArrays(1, &vao_frustum);
+    glGenBuffers(1, &vbo_frustum);
+
+    glBindVertexArray(vao_frustum);
+
+    glBindBuffer(GL_ARRAY_BUFFER, vbo_frustum);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(vertices_frustum), vertices_frustum, GL_STATIC_DRAW);
+
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), nullptr);
+    glEnableVertexAttribArray(0);
+
     glEnable(GL_DEPTH_TEST);
 
     auto handle_camera_switch = create_debounce_key_press_handler([&window_data]()
@@ -376,6 +412,11 @@ void main()
     auto handle_quads_triplet_enable_switch = create_debounce_key_press_handler_bool_switcher(quads_triplet_enable);
     auto handle_quads_triplet_animation_enable_switch = create_debounce_key_press_handler_bool_switcher(quads_triplet_animation_enable);
 
+    bool camera_render_enable[2] = { false, false };
+
+    auto handle_camera_0_render_enable_switch = create_debounce_key_press_handler_bool_switcher(camera_render_enable[0]);
+    auto handle_camera_1_render_enable_switch = create_debounce_key_press_handler_bool_switcher(camera_render_enable[1]);
+
     auto time_last = std::chrono::steady_clock::now();
     while (!glfwWindowShouldClose(window))
     {
@@ -411,7 +452,10 @@ void main()
         handle_quads_triplet_enable_switch(window, GLFW_KEY_K);
         handle_quads_triplet_animation_enable_switch(window, GLFW_KEY_L);
 
-        const auto camera_front = window_data.calculate_camera_front();
+        handle_camera_0_render_enable_switch(window, GLFW_KEY_O);
+        handle_camera_1_render_enable_switch(window, GLFW_KEY_P);
+
+        const auto camera_front = window_data.calculate_camera_front(window_data.camera_active_index);
         const auto camera_right = glm::cross(camera_front, up);
         const auto camera_speed = 2.5f * time_delta_s;
         if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS)
@@ -434,8 +478,8 @@ void main()
         glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-        const auto view = window_data.calculate_view();
-        const auto projection = window_data.calculate_projection();
+        const auto view = window_data.calculate_view(window_data.camera_active_index);
+        const auto projection = window_data.calculate_projection(window_data.camera_active_index);
         const auto view_projection = projection * view;
 
         glUseProgram(shader_program);
@@ -540,10 +584,32 @@ void main()
             }
         }
 
+        glBindVertexArray(vao_frustum);
+        for (std::size_t i = 0; i != 2; ++i)
+        {
+            if (!camera_render_enable[i])
+            {
+                continue;
+            }
+            const auto camera_view = window_data.calculate_view(i);
+            const auto camera_projection = window_data.calculate_projection(i);
+            const auto view_inv = glm::inverse(camera_view);
+            const auto projection_inv = glm::inverse(camera_projection);
+            const auto model = view_inv * projection_inv;
+            const auto mvp = view_projection * model;
+            glUniform3f(glGetUniformLocation(shader_program, "color"), 0.0f, 1.0f, 0.0f);
+            glUniformMatrix4fv(glGetUniformLocation(shader_program, "model_view_projection"), 1, GL_FALSE, glm::value_ptr(mvp));
+            glDrawArrays(GL_LINE_LOOP, 0, 4);
+            glDrawArrays(GL_LINE_LOOP, 4, 4);
+            glDrawArrays(GL_LINES, 8, 8);
+        }
+
         glfwSwapBuffers(window);
         glfwPollEvents();
     }
 
+    glDeleteVertexArrays(1, &vao_frustum);
+    glDeleteBuffers(1, &vbo_frustum);
     glDeleteVertexArrays(1, &vao_quad);
     glDeleteBuffers(1, &vbo_quad);
     glDeleteProgram(shader_program);
