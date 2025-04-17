@@ -351,6 +351,82 @@ void main()
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), nullptr);
     glEnableVertexAttribArray(0);
 
+    const float vertices_camera[] = {
+        // base of the pyramid
+        -1.0f, -1.0f, -1.0f, 1.0f, 1.0f, 1.0f, 0.0f,
+        -1.0f, 1.0f, -1.0f, 1.0f, 1.0f, 1.0f, 0.0f,
+        1.0f, -1.0f, -1.0f, 1.0f, 1.0f, 1.0f, 0.0f,
+        1.0f, 1.0f, -1.0f, 1.0f, 1.0f, 1.0f, 0.0f,
+        1.0f, -1.0f, -1.0f, 1.0f, 1.0f, 1.0f, 0.0f,
+        -1.0f, 1.0f, -1.0f, 1.0f, 1.0f, 1.0f, 0.0f,
+
+        // sides of the pyramid
+        0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f,
+        -1.0f, -1.0f, -1.0f, 1.0f, 1.0f, 0.0f, 0.0f,
+        1.0f, -1.0f, -1.0f, 1.0f, 1.0f, 0.0f, 0.0f,
+
+        0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f,
+        1.0f, -1.0f, -1.0f, 1.0f, 1.0f, 0.0f, 0.0f,
+        1.0f, 1.0f, -1.0f, 1.0f, 1.0f, 0.0f, 0.0f,
+
+        0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f,
+        1.0f, 1.0f, -1.0f, 1.0f, 1.0f, 0.0f, 0.0f,
+        -1.0f, 1.0f, -1.0f, 1.0f, 1.0f, 0.0f, 0.0f,
+
+        0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f,
+        -1.0f, 1.0f, -1.0f, 1.0f, 1.0f, 0.0f, 0.0f,
+        -1.0f, -1.0f, -1.0f, 1.0f, 1.0f, 0.0f, 0.0f,
+    };
+    unsigned vbo_camera, vao_camera;
+    glGenVertexArrays(1, &vao_camera);
+    glGenBuffers(1, &vbo_camera);
+
+    glBindVertexArray(vao_camera);
+
+    glBindBuffer(GL_ARRAY_BUFFER, vbo_camera);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(vertices_camera), vertices_camera, GL_STATIC_DRAW);
+
+    glVertexAttribPointer(0, 4, GL_FLOAT, GL_FALSE, 7 * sizeof(float), nullptr);
+    glEnableVertexAttribArray(0);
+
+    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 7 * sizeof(float), reinterpret_cast<void*>(4 * sizeof(float)));
+    glEnableVertexAttribArray(1);
+
+    const auto shader_vertex_camera_source = R"SHADER_SOURCE(#version 330 core
+layout (location = 0) in vec4 aPos;
+layout (location = 1) in vec3 aColor;
+out vec3 vColor;
+uniform mat4 model_view_projection;
+uniform mat4 projection_inv;
+void main()
+{
+    if (aPos.w == 0.0)
+    {
+        gl_Position = model_view_projection * vec4(aPos.xyz, 1.0);
+    }
+    else
+    {
+        gl_Position = model_view_projection * projection_inv * aPos;
+    }
+    vColor = aColor;
+}
+)SHADER_SOURCE";
+
+    const auto shader_fragment_camera_source = R"SHADER_SOURCE(#version 330 core
+in vec3 vColor;
+out vec4 FragColor;
+void main()
+{
+    FragColor = vec4(vColor, 1.0f);
+}
+)SHADER_SOURCE";
+
+    const auto shader_vertex_camera = compile_shader(shader_vertex_camera_source, GL_VERTEX_SHADER, "basic vertex");
+    const auto shader_fragment_camera = compile_shader(shader_fragment_camera_source, GL_FRAGMENT_SHADER, "basic fragment");
+    const auto shader_program_camera = link_program(shader_vertex_camera, shader_fragment_camera, "basic program");
+    glDeleteShader(shader_fragment_camera);
+    glDeleteShader(shader_vertex_camera);
+
     glEnable(GL_DEPTH_TEST);
 
     auto handle_camera_switch = create_debounce_key_press_handler([&window_data]()
@@ -614,13 +690,13 @@ void main()
             }
         }
 
-        glBindVertexArray(vao_frustum);
         for (std::size_t i = 0; i != 2; ++i)
         {
             if (!camera_render_enable[i])
             {
                 continue;
             }
+            glBindVertexArray(vao_frustum);
             const auto camera_view = calculate_view(i);
             const auto camera_projection = calculate_projection(i);
             const auto view_inv = glm::inverse(camera_view);
@@ -632,16 +708,27 @@ void main()
             glDrawArrays(GL_LINE_LOOP, 0, 4);
             glDrawArrays(GL_LINE_LOOP, 4, 4);
             glDrawArrays(GL_LINES, 8, 8);
+
+            glUseProgram(shader_program_camera);
+            glBindVertexArray(vao_camera);
+
+            const auto mvp_camera = view_projection * view_inv;
+            glUniformMatrix4fv(glGetUniformLocation(shader_program_camera, "model_view_projection"), 1, GL_FALSE, glm::value_ptr(mvp_camera));
+            glUniformMatrix4fv(glGetUniformLocation(shader_program_camera, "projection_inv"), 1, GL_FALSE, glm::value_ptr(projection_inv));
+            glDrawArrays(GL_TRIANGLES, 0, 18);
         }
 
         glfwSwapBuffers(window);
         glfwPollEvents();
     }
 
+    glDeleteVertexArrays(1, &vao_camera);
+    glDeleteBuffers(1, &vbo_camera);
     glDeleteVertexArrays(1, &vao_frustum);
     glDeleteBuffers(1, &vbo_frustum);
     glDeleteVertexArrays(1, &vao_quad);
     glDeleteBuffers(1, &vbo_quad);
+    glDeleteProgram(shader_program_camera);
     glDeleteProgram(shader_program);
 
     glfwTerminate();
