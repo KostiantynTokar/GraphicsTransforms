@@ -382,6 +382,24 @@ void main()
             }
         });
 
+    bool view_enable[cameras_count] = { false, true };
+    bool projection_enable[cameras_count] = { false, true };
+
+    auto handle_view_0_enable = create_debounce_key_press_handler_bool_switcher(view_enable[0]);
+    auto handle_view_1_enable = create_debounce_key_press_handler_bool_switcher(view_enable[1]);
+
+    auto handle_projection_0_enable = create_debounce_key_press_handler_bool_switcher(projection_enable[0]);
+    auto handle_projection_1_enable = create_debounce_key_press_handler_bool_switcher(projection_enable[1]);
+
+    const auto calculate_view = [&window_data, &view_enable](const std::size_t i)
+        {
+            return view_enable[i] ? window_data.calculate_view(i) : glm::mat4{ 1.0f };
+        };
+    const auto calculate_projection = [&window_data, &projection_enable](const std::size_t i)
+        {
+            return projection_enable[i] ? window_data.calculate_projection(i) : glm::mat4{ 1.0f };
+        };
+
     constexpr std::size_t quads_count = 2;
     bool quad_enable[quads_count] = { true, false };
     bool quad_scale[quads_count] = { false, false };
@@ -435,6 +453,12 @@ void main()
         handle_camera_0_projection_switch(window, GLFW_KEY_Z);
         handle_camera_1_projection_switch(window, GLFW_KEY_X);
 
+        handle_view_0_enable(window, GLFW_KEY_C);
+        handle_view_1_enable(window, GLFW_KEY_V);
+
+        handle_projection_0_enable(window, GLFW_KEY_B);
+        handle_projection_1_enable(window, GLFW_KEY_N);
+
         handle_quad_0_enable_switch(window, GLFW_KEY_R);
         handle_quad_1_enable_switch(window, GLFW_KEY_F);
 
@@ -478,8 +502,8 @@ void main()
         glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-        const auto view = window_data.calculate_view(window_data.camera_active_index);
-        const auto projection = window_data.calculate_projection(window_data.camera_active_index);
+        const auto view = calculate_view(window_data.camera_active_index);
+        const auto projection = calculate_projection(window_data.camera_active_index);
         const auto view_projection = projection * view;
 
         glUseProgram(shader_program);
@@ -591,8 +615,8 @@ void main()
             {
                 continue;
             }
-            const auto camera_view = window_data.calculate_view(i);
-            const auto camera_projection = window_data.calculate_projection(i);
+            const auto camera_view = calculate_view(i);
+            const auto camera_projection = calculate_projection(i);
             const auto view_inv = glm::inverse(camera_view);
             const auto projection_inv = glm::inverse(camera_projection);
             const auto model = view_inv * projection_inv;
