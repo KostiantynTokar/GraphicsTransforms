@@ -540,9 +540,13 @@ void main()
     auto handle_quads_triplet_animation_enable_switch = create_debounce_key_press_handler_bool_switcher(quads_triplet_animation_enable);
 
     bool camera_render_enable[2] = { false, false };
+    bool frustum_render_enable[2] = { false, false };
 
     auto handle_camera_0_render_enable_switch = create_debounce_key_press_handler_bool_switcher(camera_render_enable[0]);
     auto handle_camera_1_render_enable_switch = create_debounce_key_press_handler_bool_switcher(camera_render_enable[1]);
+
+    auto handle_frustum_0_render_enable_switch = create_debounce_key_press_handler_bool_switcher(frustum_render_enable[0]);
+    auto handle_frustum_1_render_enable_switch = create_debounce_key_press_handler_bool_switcher(frustum_render_enable[1]);
 
     auto time_last = std::chrono::steady_clock::now();
     while (!glfwWindowShouldClose(window))
@@ -589,7 +593,10 @@ void main()
         handle_quads_triplet_animation_enable_switch(window, GLFW_KEY_L);
 
         handle_camera_0_render_enable_switch(window, GLFW_KEY_O);
-        handle_camera_1_render_enable_switch(window, GLFW_KEY_P);
+        handle_frustum_0_render_enable_switch(window, GLFW_KEY_P);
+
+        handle_camera_1_render_enable_switch(window, GLFW_KEY_M);
+        handle_frustum_1_render_enable_switch(window, GLFW_KEY_COMMA);
 
         const auto camera_front = window_data.calculate_camera_front(window_data.camera_active_index);
         const auto camera_right = glm::cross(camera_front, up);
@@ -722,7 +729,7 @@ void main()
 
         for (std::size_t i = 0; i != 2; ++i)
         {
-            if (!camera_render_enable[i])
+            if (!frustum_render_enable[i])
             {
                 continue;
             }
@@ -738,10 +745,21 @@ void main()
             glDrawArrays(GL_LINE_LOOP, 0, 4);
             glDrawArrays(GL_LINE_LOOP, 4, 4);
             glDrawArrays(GL_LINES, 8, 8);
+        }
 
+        for (std::size_t i = 0; i != 2; ++i)
+        {
+            if (!camera_render_enable[i])
+            {
+                continue;
+            }
             glUseProgram(shader_program_camera);
             glBindVertexArray(vao_camera);
 
+            const auto camera_view = calculate_view(i);
+            const auto camera_projection = calculate_projection(i);
+            const auto view_inv = glm::inverse(camera_view);
+            const auto projection_inv = glm::inverse(camera_projection);
             const auto mvp_camera = view_projection * view_inv;
             glUniformMatrix4fv(glGetUniformLocation(shader_program_camera, "model_view_projection"), 1, GL_FALSE, glm::value_ptr(mvp_camera));
             glUniformMatrix4fv(glGetUniformLocation(shader_program_camera, "projection_inv"), 1, GL_FALSE, glm::value_ptr(projection_inv));
