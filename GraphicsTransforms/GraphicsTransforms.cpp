@@ -152,7 +152,7 @@ static void scroll_callback(GLFWwindow* const window, const double xoffset, cons
     }
 }
 
-static unsigned compile_shader(const char* const source, const GLenum type, const char* const type_string)
+static unsigned compile_shader(const char* const source, const GLenum type, const char* const shader_name)
 {
     const auto shader = glCreateShader(type);
     glShaderSource(shader, 1, &source, nullptr);
@@ -165,11 +165,34 @@ static unsigned compile_shader(const char* const source, const GLenum type, cons
         glGetShaderiv(shader, GL_INFO_LOG_LENGTH, &info_log_length);
         const auto info_log = new char[info_log_length];
         glGetShaderInfoLog(shader, info_log_length, NULL, info_log);
-        std::cout << "Error: failed to compile shader of type: " << type_string << "\n" << info_log << std::endl;
+        std::cout << "Error: failed to compile shader \"" << shader_name << "\"\n" << info_log << std::endl;
         delete[] info_log;
         std::exit(1);
     }
     return shader;
+}
+
+static unsigned link_program(const unsigned shader_vertex, const unsigned shader_fragment, const char* const program_name)
+{
+    const auto shader_program = glCreateProgram();
+    glAttachShader(shader_program, shader_vertex);
+    glAttachShader(shader_program, shader_fragment);
+    glLinkProgram(shader_program);
+    {
+        GLint success;
+        glGetProgramiv(shader_program, GL_LINK_STATUS, &success);
+        if (!success)
+        {
+            GLint info_log_length;
+            glGetProgramiv(shader_program, GL_INFO_LOG_LENGTH, &info_log_length);
+            const auto info_log = new char[info_log_length];
+            glGetProgramInfoLog(shader_program, info_log_length, NULL, info_log);
+            std::cout << "Error: failed to link shader program \"" << program_name << "\"\n" << info_log << std::endl;
+            delete[] info_log;
+            std::exit(1);
+        }
+    }
+    return shader_program;
 }
 
 template<typename T>
@@ -286,26 +309,9 @@ void main()
 }
 )SHADER_SOURCE";
 
-    const auto shader_vertex = compile_shader(shader_vertex_source, GL_VERTEX_SHADER, "vertex");
-    const auto shader_fragment = compile_shader(shader_fragment_source, GL_FRAGMENT_SHADER, "fragment");
-    const auto shader_program = glCreateProgram();
-    glAttachShader(shader_program, shader_vertex);
-    glAttachShader(shader_program, shader_fragment);
-    glLinkProgram(shader_program);
-    {
-        GLint success;
-        glGetProgramiv(shader_program, GL_LINK_STATUS, &success);
-        if (!success)
-        {
-            GLint info_log_length;
-            glGetProgramiv(shader_program, GL_INFO_LOG_LENGTH, &info_log_length);
-            const auto info_log = new char[info_log_length];
-            glGetProgramInfoLog(shader_program, info_log_length, NULL, info_log);
-            std::cout << "Error: failed to link shader program\n" << info_log << std::endl;
-            delete[] info_log;
-            std::exit(1);
-        }
-    }
+    const auto shader_vertex = compile_shader(shader_vertex_source, GL_VERTEX_SHADER, "basic vertex");
+    const auto shader_fragment = compile_shader(shader_fragment_source, GL_FRAGMENT_SHADER, "basic fragment");
+    const auto shader_program = link_program(shader_vertex, shader_fragment, "basic program");
     glDeleteShader(shader_fragment);
     glDeleteShader(shader_vertex);
 
