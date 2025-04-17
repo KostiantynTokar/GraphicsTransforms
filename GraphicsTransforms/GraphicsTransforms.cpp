@@ -230,20 +230,28 @@ int main()
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 
+    static constexpr float yaw_initial[2] = { glm::radians(-90.0f), 0.0f };
+    static constexpr float pitch_initial[2] = { 0.0f, glm::radians(-30.0f) };
+    static constexpr glm::vec3 camera_pos_initial[2] = { glm::vec3{ 0.0f, 0.0f, 1.0f }, glm::vec3{ -5.0f, 3.0f, 1.0f } };
+    static constexpr float ortho_height_half_initial[2] = { 2.0f, 2.0f };
+    static constexpr float fov_initial[2] = { glm::radians(45.0f), glm::radians(45.0f) };
+    static constexpr float near_initial[2] = { 0.1f, 0.1f };
+    static constexpr float far_initial[2] = { 10.0f, 50.0f };
+
     WindowData window_data = {
         .width = 800,
         .height = 600,
         .camera_active_index = 0,
         .camera_fov_control_index = 0,
         .mouse_first = true,
-        .yaw = { glm::radians(-90.0f), 0.0f },
-        .pitch = { 0.0f, glm::radians(-30.0f) },
-        .camera_pos = { glm::vec3{ 0.0f, 0.0f, 1.0f }, glm::vec3{ -5.0f, 3.0f, 1.0f } },
+        .yaw = { yaw_initial[0], yaw_initial[1] },
+        .pitch = { pitch_initial[0], pitch_initial[1] },
+        .camera_pos = { camera_pos_initial[0], camera_pos_initial[1] },
         .projection_type = { ProjectionType::perspective, ProjectionType::perspective },
-        .ortho_height_half = { 2.0f, 2.0f },
-        .fov = { glm::radians(45.0f), glm::radians(45.0f) },
-        .near = { 0.1f, 0.1f },
-        .far = { 10.0f, 50.0f },
+        .ortho_height_half = { ortho_height_half_initial[0], ortho_height_half_initial[1] },
+        .fov = { fov_initial[0], fov_initial[1] },
+        .near = { near_initial[0], near_initial[1] },
+        .far = { far_initial[0], far_initial[1] },
     };
 
     GLFWwindow* const window = glfwCreateWindow(window_data.width, window_data.height, "LearnOpenGL", NULL, NULL);
@@ -429,6 +437,25 @@ void main()
 
     glEnable(GL_DEPTH_TEST);
 
+    const auto reset_camera = [&window_data](const std::size_t i)
+        {
+            window_data.yaw[i] = yaw_initial[i];
+            window_data.pitch[i] = pitch_initial[i];
+            window_data.camera_pos[i] = camera_pos_initial[i];
+            window_data.ortho_height_half[i] = ortho_height_half_initial[i];
+            window_data.fov[i] = fov_initial[i];
+            window_data.near[i] = near_initial[i];
+            window_data.far[i] = far_initial[i];
+        };
+
+    auto handle_camera_0_reset = create_debounce_key_press_handler([reset_camera]()
+        {
+            reset_camera(0);
+        });
+    auto handle_camera_1_reset = create_debounce_key_press_handler([reset_camera]()
+        {
+            reset_camera(1);
+        });
     auto handle_camera_switch = create_debounce_key_press_handler([&window_data]()
         {
             window_data.camera_active_index = (window_data.camera_active_index + 1) % cameras_count;
@@ -529,6 +556,9 @@ void main()
         {
             glfwSetWindowShouldClose(window, true);
         }
+
+        handle_camera_0_reset(window, GLFW_KEY_1);
+        handle_camera_1_reset(window, GLFW_KEY_2);
 
         handle_camera_switch(window, GLFW_KEY_Q);
         handle_camera_fov_control_switch(window, GLFW_KEY_E);
