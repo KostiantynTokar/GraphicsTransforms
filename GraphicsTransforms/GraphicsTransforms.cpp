@@ -16,6 +16,9 @@
 static constexpr glm::vec3 up{ 0.0f, 1.0f, 0.0f };
 static constexpr std::size_t cameras_count{ 2 };
 
+static constexpr float near[cameras_count] = { 0.1f, 0.1f };
+static constexpr float far[cameras_count] = { 10.0f, 50.0f };
+
 enum struct ProjectionType
 {
     perspective,
@@ -40,8 +43,6 @@ struct WindowData
 
     float ortho_height_half[cameras_count];
     float fov[cameras_count];
-    float near[cameras_count];
-    float far[cameras_count];
 
     glm::vec3 calculate_camera_front(const std::size_t i) const
     {
@@ -235,8 +236,6 @@ int main()
     static constexpr glm::vec3 camera_pos_initial[2] = { glm::vec3{ 0.0f, 0.0f, 1.0f }, glm::vec3{ -5.0f, 3.0f, 1.0f } };
     static constexpr float ortho_height_half_initial[2] = { 2.0f, 2.0f };
     static constexpr float fov_initial[2] = { glm::radians(45.0f), glm::radians(45.0f) };
-    static constexpr float near_initial[2] = { 0.1f, 0.1f };
-    static constexpr float far_initial[2] = { 10.0f, 50.0f };
 
     WindowData window_data = {
         .width = 800,
@@ -250,8 +249,6 @@ int main()
         .projection_type = { ProjectionType::perspective, ProjectionType::perspective },
         .ortho_height_half = { ortho_height_half_initial[0], ortho_height_half_initial[1] },
         .fov = { fov_initial[0], fov_initial[1] },
-        .near = { near_initial[0], near_initial[1] },
-        .far = { far_initial[0], far_initial[1] },
     };
 
     GLFWwindow* const window = glfwCreateWindow(window_data.width, window_data.height, "LearnOpenGL", NULL, NULL);
@@ -444,8 +441,6 @@ void main()
             window_data.camera_pos[i] = camera_pos_initial[i];
             window_data.ortho_height_half[i] = ortho_height_half_initial[i];
             window_data.fov[i] = fov_initial[i];
-            window_data.near[i] = near_initial[i];
-            window_data.far[i] = far_initial[i];
         };
 
     auto handle_camera_0_reset = create_debounce_key_press_handler([reset_camera]()
