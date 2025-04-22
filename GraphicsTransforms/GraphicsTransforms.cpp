@@ -33,6 +33,9 @@ struct WindowData
     std::size_t camera_active_index;
     std::size_t camera_fov_control_index;
 
+    bool view_enable[cameras_count];
+    bool projection_enable[cameras_count];
+
     bool mouse_first;
     glm::vec2 mouse_pos_last;
     float yaw[cameras_count];
@@ -62,6 +65,10 @@ struct WindowData
 
     glm::mat4 calculate_view(const std::size_t i) const
     {
+        if (!view_enable[i])
+        {
+            return glm::mat4{ 1.0f };
+        }
         const auto front = calculate_camera_front(i);
         const auto pos = camera_pos[i];
         return glm::lookAt(pos, pos + front, up);
@@ -69,6 +76,10 @@ struct WindowData
 
     glm::mat4 calculate_projection(const std::size_t i) const
     {
+        if (!projection_enable[i])
+        {
+            return glm::mat4{ 1.0f };
+        }
         const auto aspect_ratio = static_cast<float>(width) / height;
         switch (projection_type[i])
         {
@@ -112,6 +123,11 @@ static void mouse_callback(GLFWwindow* const window, double xpos_in, double ypos
         data->mouse_first = false;
     }
 
+    if (!data->view_enable[data->camera_active_index])
+    {
+        return;
+    }
+
     const auto offset = pos - data->mouse_pos_last;
     data->mouse_pos_last = pos;
 
@@ -130,6 +146,10 @@ static void mouse_callback(GLFWwindow* const window, double xpos_in, double ypos
 static void scroll_callback(GLFWwindow* const window, const double xoffset, const double yoffset)
 {
     const auto data = static_cast<WindowData*>(glfwGetWindowUserPointer(window));
+    if (!data->projection_enable[data->camera_fov_control_index])
+    {
+        return;
+    }
     switch (data->projection_type[data->camera_fov_control_index])
     {
     case ProjectionType::perspective:
@@ -242,6 +262,8 @@ int main()
         .height = 600,
         .camera_active_index = 0,
         .camera_fov_control_index = 0,
+        .view_enable = { false, true },
+        .projection_enable = { false, true },
         .mouse_first = true,
         .yaw = { yaw_initial[0], yaw_initial[1] },
         .pitch = { pitch_initial[0], pitch_initial[1] },
@@ -486,23 +508,11 @@ void main()
             }
         });
 
-    bool view_enable[cameras_count] = { false, true };
-    bool projection_enable[cameras_count] = { false, true };
+    auto handle_view_0_enable = create_debounce_key_press_handler_bool_switcher(window_data.view_enable[0]);
+    auto handle_view_1_enable = create_debounce_key_press_handler_bool_switcher(window_data.view_enable[1]);
 
-    auto handle_view_0_enable = create_debounce_key_press_handler_bool_switcher(view_enable[0]);
-    auto handle_view_1_enable = create_debounce_key_press_handler_bool_switcher(view_enable[1]);
-
-    auto handle_projection_0_enable = create_debounce_key_press_handler_bool_switcher(projection_enable[0]);
-    auto handle_projection_1_enable = create_debounce_key_press_handler_bool_switcher(projection_enable[1]);
-
-    const auto calculate_view = [&window_data, &view_enable](const std::size_t i)
-        {
-            return view_enable[i] ? window_data.calculate_view(i) : glm::mat4{ 1.0f };
-        };
-    const auto calculate_projection = [&window_data, &projection_enable](const std::size_t i)
-        {
-            return projection_enable[i] ? window_data.calculate_projection(i) : glm::mat4{ 1.0f };
-        };
+    auto handle_projection_0_enable = create_debounce_key_press_handler_bool_switcher(window_data.projection_enable[0]);
+    auto handle_projection_1_enable = create_debounce_key_press_handler_bool_switcher(window_data.projection_enable[1]);
 
     constexpr std::size_t quads_count = 2;
     bool quad_enable[quads_count] = { true, false };
@@ -616,8 +626,8 @@ void main()
         glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-        const auto view = calculate_view(window_data.camera_active_index);
-        const auto projection = calculate_projection(window_data.camera_active_index);
+        const auto view = window_data.calculate_view(window_data.camera_active_index);
+        const auto projection = window_data.calculate_projection(window_data.camera_active_index);
         const auto view_projection = projection * view;
 
         glUseProgram(shader_program);
@@ -729,8 +739,8 @@ void main()
                 continue;
             }
             glBindVertexArray(vao_frustum);
-            const auto camera_view = calculate_view(i);
-            const auto camera_projection = calculate_projection(i);
+            const auto camera_view = window_data.calculate_view(i);
+            const auto camera_projection = window_data.calculate_projection(i);
             const auto view_inv = glm::inverse(camera_view);
             const auto projection_inv = glm::inverse(camera_projection);
             const auto model = view_inv * projection_inv;
@@ -751,8 +761,8 @@ void main()
             glUseProgram(shader_program_camera);
             glBindVertexArray(vao_camera);
 
-            const auto camera_view = calculate_view(i);
-            const auto camera_projection = calculate_projection(i);
+            const auto camera_view = window_data.calculate_view(i);
+            const auto camera_projection = window_data.calculate_projection(i);
             const auto view_inv = glm::inverse(camera_view);
             const auto projection_inv = glm::inverse(camera_projection);
             const auto mvp_camera = view_projection * view_inv;
