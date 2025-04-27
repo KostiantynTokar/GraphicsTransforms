@@ -49,3 +49,6 @@ target_link_libraries(GraphicsTransforms
   glad_gl_core_mx_4_6
   glm::glm
 )
+
+include(GNUInstallDirs)
+install(TARGETS GraphicsTransforms)
